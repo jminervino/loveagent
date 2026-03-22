@@ -1,0 +1,38 @@
+# Flutter
+*.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dart
+.dart_tool/
+.pub-cache/
+.pub/
+pubspec.lock
+
+# Android
+loveagent/android/.gradle/
+loveagent/android/local.properties
+loveagent/android/app/debug/
+loveagent/android/app/profile/
+loveagent/android/app/release/
+*.jks
+*.keystore
+
+# iOS
+loveagent/ios/Pods/
+loveagent/ios/.symlinks/
+
+# Claude Code local settings
+.claude/settings.local.json
