@@ -31,24 +31,17 @@ class AuthRepositoryImpl implements AuthRepository {
     final response = await _client.auth.signUp(
       email: email,
       password: password,
+      data: {'name': name},
     );
 
     final user = response.user;
     if (user == null) throw Exception('Falha no cadastro');
 
-    // Create user profile in our users table
-    await _client.from('users').insert({
-      'id': user.id,
-      'email': email,
-      'name': name,
-    });
+    // Profile is created automatically by database trigger (handle_new_user)
+    // Wait briefly for trigger to complete, then fetch
+    await Future.delayed(const Duration(milliseconds: 500));
 
-    return UserModel(
-      id: user.id,
-      email: email,
-      name: name,
-      plan: 'free',
-    );
+    return _fetchOrCreateUserProfile(user);
   }
 
   @override
@@ -89,13 +82,12 @@ class AuthRepositoryImpl implements AuthRepository {
       return UserModel.fromMap(response);
     }
 
-    // First login — create profile
-    final newUser = {
-      'id': user.id,
-      'email': user.email ?? '',
-      'name': user.userMetadata?['name'],
-    };
-    await _client.from('users').insert(newUser);
-    return UserModel.fromMap(newUser);
+    // Trigger should have created the profile, return basic info
+    return UserModel(
+      id: user.id,
+      email: user.email ?? '',
+      name: user.userMetadata?['name'],
+      plan: 'free',
+    );
   }
 }
