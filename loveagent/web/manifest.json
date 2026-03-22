@@ -1,0 +1,11 @@
+{
+  "name": "LoveAgent",
+  "short_name": "LoveAgent",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#e94560",
+  "description": "Seja mais presente no seu relacionamento",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false
+}
