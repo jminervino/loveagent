@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../calendar/domain/entities/special_date.dart';
+import '../../../calendar/presentation/controllers/calendar_controller.dart';
 import '../../../partner/domain/entities/partner.dart';
 import '../../../partner/presentation/controllers/partner_controller.dart';
 import '../../../partner/presentation/pages/partner_form_page.dart';
@@ -80,7 +83,7 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _Dashboard extends StatelessWidget {
+class _Dashboard extends ConsumerWidget {
   const _Dashboard({required this.partner});
 
   final Partner partner;
@@ -98,28 +101,26 @@ class _Dashboard extends StatelessWidget {
     }
   }
 
-  String _budgetLabel(String budget) {
-    switch (budget) {
-      case 'economico':
-        return 'Econômico';
-      case 'moderado':
-        return 'Moderado';
-      case 'generoso':
-        return 'Generoso';
-      default:
-        return budget;
-    }
-  }
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final upcomingAsync = ref.watch(upcomingDatesProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Countdown card
+          upcomingAsync.when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (dates) => _CountdownSection(
+              dates: dates,
+              partnerLikes: partner.likes,
+            ),
+          ),
+
           // Partner card
           Card(
             clipBehavior: Clip.antiAlias,
@@ -172,30 +173,6 @@ class _Dashboard extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // Quick info row
-          Row(
-            children: [
-              Expanded(
-                child: _InfoCard(
-                  icon: Icons.cake_outlined,
-                  label: 'Aniversário',
-                  value: partner.birthDate != null
-                      ? '${partner.birthDate!.day.toString().padLeft(2, '0')}/${partner.birthDate!.month.toString().padLeft(2, '0')}'
-                      : 'Não informado',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _InfoCard(
-                  icon: Icons.attach_money,
-                  label: 'Orçamento',
-                  value: _budgetLabel(partner.budgetLevel),
-                ),
-              ),
-            ],
           ),
           const SizedBox(height: 16),
 
@@ -254,35 +231,213 @@ class _Dashboard extends StatelessWidget {
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({
-    required this.icon,
-    required this.label,
-    required this.value,
+class _CountdownSection extends StatelessWidget {
+  const _CountdownSection({
+    required this.dates,
+    required this.partnerLikes,
   });
 
-  final IconData icon;
-  final String label;
-  final String value;
+  final List<SpecialDate> dates;
+  final List<String> partnerLikes;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Icon(icon, color: AppColors.primary),
-            const SizedBox(height: 8),
-            Text(label, style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+    if (dates.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Card(
+          color: AppColors.success.withOpacity(0.08),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_outline,
+                    color: AppColors.success, size: 32),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Tudo tranquilo!',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.success,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Nenhuma data importante nos próximos dias.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                      ),
+                    ],
                   ),
-              textAlign: TextAlign.center,
+                ),
+              ],
             ),
+          ),
+        ),
+      );
+    }
+
+    final next = dates.first;
+    final days = next.daysUntil ?? 0;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: _CountdownCard(
+        date: next,
+        days: days,
+        partnerLikes: partnerLikes,
+      ),
+    );
+  }
+}
+
+class _CountdownCard extends StatelessWidget {
+  const _CountdownCard({
+    required this.date,
+    required this.days,
+    required this.partnerLikes,
+  });
+
+  final SpecialDate date;
+  final int days;
+  final List<String> partnerLikes;
+
+  Color get _bgColor {
+    if (days == 0) return AppColors.error;
+    if (days <= 1) return AppColors.error;
+    if (days <= 7) return AppColors.accent;
+    if (days <= 15) return Colors.amber.shade700;
+    return AppColors.primary;
+  }
+
+  String get _daysText {
+    if (days == 0) return 'HOJE!';
+    if (days == 1) return 'AMANHÃ';
+    return '$days dias';
+  }
+
+  String? get _hint {
+    if (partnerLikes.isEmpty) return null;
+    final likesText = partnerLikes.take(2).join(' e ');
+    return 'Ela gosta de $likesText';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final displayDate = date.nextOccurrence ?? date.date;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [_bgColor, _bgColor.withOpacity(0.7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: _bgColor.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Label
+            Row(
+              children: [
+                if (date.isAnnual)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 6),
+                    child: Icon(Icons.repeat, size: 16, color: Colors.white70),
+                  ),
+                Expanded(
+                  child: Text(
+                    date.label,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (date.partnerName != null)
+                  Text(
+                    date.partnerName!,
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Big number
+            Center(
+              child: Text(
+                _daysText,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: days == 0 || days == 1 ? 40 : 48,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Date
+            Center(
+              child: Text(
+                DateFormat("d 'de' MMMM 'de' yyyy", 'pt_BR')
+                    .format(displayDate),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+
+            // Hint
+            if (_hint != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lightbulb_outline,
+                        size: 16, color: Colors.white70),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        _hint!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
