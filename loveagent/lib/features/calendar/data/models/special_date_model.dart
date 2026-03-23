@@ -8,12 +8,37 @@ class SpecialDateModel extends SpecialDate {
     required super.date,
     super.isAnnual,
     super.isSystem,
+    super.recurrence,
     super.partnerName,
     super.nextOccurrence,
     super.daysUntil,
   });
 
+  static Recurrence _parseRecurrence(String? value) {
+    switch (value) {
+      case 'monthly':
+        return Recurrence.monthly;
+      case 'once':
+        return Recurrence.once;
+      case 'annual':
+      default:
+        return Recurrence.annual;
+    }
+  }
+
+  static String _recurrenceToString(Recurrence r) {
+    switch (r) {
+      case Recurrence.monthly:
+        return 'monthly';
+      case Recurrence.once:
+        return 'once';
+      case Recurrence.annual:
+        return 'annual';
+    }
+  }
+
   factory SpecialDateModel.fromMap(Map<String, dynamic> map) {
+    final recurrence = _parseRecurrence(map['recurrence'] as String?);
     return SpecialDateModel(
       id: map['id'] as String,
       partnerId: map['partner_id'] as String,
@@ -21,6 +46,7 @@ class SpecialDateModel extends SpecialDate {
       date: DateTime.parse(map['date'] as String),
       isAnnual: map['is_annual'] as bool? ?? true,
       isSystem: map['is_system'] as bool? ?? false,
+      recurrence: recurrence,
     );
   }
 
@@ -42,8 +68,9 @@ class SpecialDateModel extends SpecialDate {
       'partner_id': partnerId,
       'label': label,
       'date': date.toIso8601String().split('T').first,
-      'is_annual': isAnnual,
-      'is_system': false, // user-created dates are never system
+      'is_annual': recurrence == Recurrence.annual,
+      'is_system': false,
+      'recurrence': _recurrenceToString(recurrence),
     };
   }
 
@@ -51,7 +78,8 @@ class SpecialDateModel extends SpecialDate {
     return {
       'label': label,
       'date': date.toIso8601String().split('T').first,
-      'is_annual': isAnnual,
+      'is_annual': recurrence == Recurrence.annual,
+      'recurrence': _recurrenceToString(recurrence),
     };
   }
 }

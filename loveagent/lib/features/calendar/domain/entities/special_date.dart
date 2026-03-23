@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+enum Recurrence { once, monthly, annual }
+
 class SpecialDate extends Equatable {
   const SpecialDate({
     required this.id,
@@ -8,6 +10,7 @@ class SpecialDate extends Equatable {
     required this.date,
     this.isAnnual = true,
     this.isSystem = false,
+    this.recurrence = Recurrence.annual,
     this.partnerName,
     this.nextOccurrence,
     this.daysUntil,
@@ -19,18 +22,28 @@ class SpecialDate extends Equatable {
   final DateTime date;
   final bool isAnnual;
   final bool isSystem;
+  final Recurrence recurrence;
 
   // Computed fields (from get_upcoming_dates or local calc)
   final String? partnerName;
   final DateTime? nextOccurrence;
   final int? daysUntil;
 
+  String get recurrenceLabel {
+    switch (recurrence) {
+      case Recurrence.monthly:
+        return 'Mensal (dia ${date.day})';
+      case Recurrence.annual:
+        return 'Anual';
+      case Recurrence.once:
+        return 'Única vez';
+    }
+  }
+
   String get urgencyLabel {
     if (daysUntil == null) return '';
     if (daysUntil == 0) return 'Hoje!';
     if (daysUntil == 1) return 'Amanhã';
-    if (daysUntil! <= 7) return 'Em $daysUntil dias';
-    if (daysUntil! <= 30) return 'Em $daysUntil dias';
     return 'Em $daysUntil dias';
   }
 
@@ -44,7 +57,7 @@ class SpecialDate extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, partnerId, label, date];
+  List<Object?> get props => [id, partnerId, label, date, recurrence];
 }
 
 enum UrgencyLevel { critical, high, medium, low, none }

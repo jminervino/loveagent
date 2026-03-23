@@ -100,7 +100,16 @@ class DateCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 12),
                         ],
-                        if (date.isAnnual)
+                        if (date.recurrence == Recurrence.monthly)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.repeat, size: 14, color: AppColors.tertiary),
+                              const SizedBox(width: 2),
+                              Text('Mensal', style: TextStyle(fontSize: 10, color: AppColors.tertiary)),
+                            ],
+                          )
+                        else if (date.isAnnual)
                           Icon(Icons.repeat, size: 14, color: AppColors.textSecondary),
                         if (date.isSystem) ...[
                           const SizedBox(width: 4),

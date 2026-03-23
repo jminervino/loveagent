@@ -1,0 +1,85 @@
+-- Add recurrence type to special_dates
+CREATE TYPE recurrence_type AS ENUM ('once', 'monthly', 'annual');
+
+-- Add column with default 'annual' to keep backward compat
+ALTER TABLE special_dates ADD COLUMN recurrence recurrence_type;
+
+-- Migrate existing data
+UPDATE special_dates SET recurrence = CASE
+  WHEN is_annual = true THEN 'annual'::recurrence_type
+  ELSE 'once'::recurrence_type
+END;
+
+ALTER TABLE special_dates ALTER COLUMN recurrence SET NOT NULL;
+ALTER TABLE special_dates ALTER COLUMN recurrence SET DEFAULT 'annual';
+
+-- Update get_upcoming_dates to handle monthly recurrence
+CREATE OR REPLACE FUNCTION get_upcoming_dates(
+  p_user_id UUID,
+  p_days INT DEFAULT 30
+)
+RETURNS TABLE (
+  date_id UUID,
+  partner_id UUID,
+  partner_name TEXT,
+  label TEXT,
+  next_occurrence DATE,
+  days_until INT
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    sub.date_id,
+    sub.partner_id,
+    sub.partner_name,
+    sub.label,
+    sub.next_occurrence,
+    sub.days_until
+  FROM (
+    SELECT
+      sd.id AS date_id,
+      sd.partner_id,
+      p.name AS partner_name,
+      sd.label,
+      CASE
+        -- Monthly: next occurrence is this month's day or next month's
+        WHEN sd.recurrence = 'monthly' THEN
+          CASE
+            WHEN EXTRACT(DAY FROM sd.date)::INT >= EXTRACT(DAY FROM CURRENT_DATE)::INT
+            THEN (DATE_TRUNC('month', CURRENT_DATE) + ((EXTRACT(DAY FROM sd.date)::INT - 1) * INTERVAL '1 day'))::DATE
+            ELSE (DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' + ((EXTRACT(DAY FROM sd.date)::INT - 1) * INTERVAL '1 day'))::DATE
+          END
+        -- Annual: same logic as before
+        WHEN sd.recurrence = 'annual' OR sd.is_annual THEN
+          CASE
+            WHEN (sd.date + (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM sd.date)) * INTERVAL '1 year')::DATE >= CURRENT_DATE
+            THEN (sd.date + (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM sd.date)) * INTERVAL '1 year')::DATE
+            ELSE (sd.date + (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM sd.date) + 1) * INTERVAL '1 year')::DATE
+          END
+        -- Once: just the date
+        ELSE sd.date
+      END AS next_occurrence,
+      CASE
+        WHEN sd.recurrence = 'monthly' THEN
+          CASE
+            WHEN EXTRACT(DAY FROM sd.date)::INT >= EXTRACT(DAY FROM CURRENT_DATE)::INT
+            THEN (DATE_TRUNC('month', CURRENT_DATE) + ((EXTRACT(DAY FROM sd.date)::INT - 1) * INTERVAL '1 day'))::DATE - CURRENT_DATE
+            ELSE (DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' + ((EXTRACT(DAY FROM sd.date)::INT - 1) * INTERVAL '1 day'))::DATE - CURRENT_DATE
+          END
+        WHEN sd.recurrence = 'annual' OR sd.is_annual THEN
+          CASE
+            WHEN (sd.date + (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM sd.date)) * INTERVAL '1 year')::DATE >= CURRENT_DATE
+            THEN ((sd.date + (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM sd.date)) * INTERVAL '1 year')::DATE - CURRENT_DATE)
+            ELSE ((sd.date + (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM sd.date) + 1) * INTERVAL '1 year')::DATE - CURRENT_DATE)
+          END
+        ELSE (sd.date - CURRENT_DATE)
+      END AS days_until
+    FROM special_dates sd
+    JOIN partners p ON p.id = sd.partner_id
+    WHERE p.user_id = p_user_id
+      AND p.is_active = true
+  ) sub
+  WHERE sub.days_until BETWEEN 0 AND p_days
+  ORDER BY sub.days_until ASC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
