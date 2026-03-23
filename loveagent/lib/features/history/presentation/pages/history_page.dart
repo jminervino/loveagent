@@ -15,19 +15,6 @@ class HistoryPage extends ConsumerWidget {
     final surprisesAsync = ref.watch(surprisesProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Histórico'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _navigateToAdd(context, ref),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _navigateToAdd(context, ref),
-        child: const Icon(Icons.add),
-      ),
       body: surprisesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
@@ -35,54 +22,14 @@ class HistoryPage extends ConsumerWidget {
           if (surprises.isEmpty) {
             return _EmptyState(onAdd: () => _navigateToAdd(context, ref));
           }
-
-          return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(surprisesProvider),
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-              itemCount: surprises.length,
-              itemBuilder: (context, index) {
-                final surprise = surprises[index];
-                final showMonthHeader = index == 0 ||
-                    _monthKey(surprise.date) !=
-                        _monthKey(surprises[index - 1].date);
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (showMonthHeader) ...[
-                      if (index > 0) const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          _monthLabel(surprise.date),
-                          style:
-                              Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    color: AppColors.textSecondary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                      ),
-                    ],
-                    _SurpriseCard(
-                      surprise: surprise,
-                      onDelete: () =>
-                          _confirmDelete(context, ref, surprise),
-                    ),
-                  ],
-                );
-              },
-            ),
+          return _TimelineView(
+            surprises: surprises,
+            onAdd: () => _navigateToAdd(context, ref),
+            onDelete: (s) => _confirmDelete(context, ref, s),
           );
         },
       ),
     );
-  }
-
-  String _monthKey(DateTime date) => '${date.year}-${date.month}';
-
-  String _monthLabel(DateTime date) {
-    return DateFormat('MMMM yyyy', 'pt_BR').format(date);
   }
 
   Future<void> _navigateToAdd(BuildContext context, WidgetRef ref) async {
@@ -125,6 +72,190 @@ class HistoryPage extends ConsumerWidget {
   }
 }
 
+class _TimelineView extends StatelessWidget {
+  const _TimelineView({
+    required this.surprises,
+    required this.onAdd,
+    required this.onDelete,
+  });
+
+  final List<Surprise> surprises;
+  final VoidCallback onAdd;
+  final void Function(Surprise) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    // Group by month
+    final grouped = <String, List<Surprise>>{};
+    for (final s in surprises) {
+      final key = '${s.date.year}-${s.date.month.toString().padLeft(2, '0')}';
+      grouped.putIfAbsent(key, () => []).add(s);
+    }
+    final months = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    return CustomScrollView(
+      slivers: [
+        // Header
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'ARQUIVO',
+                  style: TextStyle(
+                    fontFamily: 'SpaceGrotesk',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 3,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Surpresas\nRealizadas',
+                  style: TextStyle(
+                    fontFamily: 'PlusJakartaSans',
+                    fontWeight: FontWeight.w800,
+                    fontSize: 32,
+                    height: 1.0,
+                    letterSpacing: -1.5,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Timeline
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final monthKey = months[index];
+                final items = grouped[monthKey]!;
+                final firstDate = items.first.date;
+                final isFirst = index == 0;
+
+                return _MonthSection(
+                  label: DateFormat('MMMM yyyy', 'pt_BR').format(firstDate).toUpperCase(),
+                  items: items,
+                  isFirst: isFirst,
+                  onDelete: onDelete,
+                );
+              },
+              childCount: months.length,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MonthSection extends StatelessWidget {
+  const _MonthSection({
+    required this.label,
+    required this.items,
+    required this.isFirst,
+    required this.onDelete,
+  });
+
+  final String label;
+  final List<Surprise> items;
+  final bool isFirst;
+  final void Function(Surprise) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 32, top: isFirst ? 0 : 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Month header with dot
+          Row(
+            children: [
+              SizedBox(
+                width: 44,
+                child: Center(
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isFirst ? AppColors.tertiary : AppColors.outline,
+                      boxShadow: isFirst
+                          ? [
+                              BoxShadow(
+                                color: AppColors.tertiary.withOpacity(0.3),
+                                blurRadius: 8,
+                                spreadRadius: 2,
+                              ),
+                            ]
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'SpaceGrotesk',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                  color: AppColors.outline,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Items with timeline line
+          ...items.asMap().entries.map((entry) {
+            final surprise = entry.value;
+            final isLast = entry.key == items.length - 1;
+
+            return IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Timeline line
+                  SizedBox(
+                    width: 44,
+                    child: Center(
+                      child: Container(
+                        width: 1,
+                        color: isLast
+                            ? Colors.transparent
+                            : AppColors.primary.withOpacity(0.15),
+                      ),
+                    ),
+                  ),
+                  // Card
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _SurpriseCard(
+                        surprise: surprise,
+                        onDelete: () => onDelete(surprise),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
 class _SurpriseCard extends StatelessWidget {
   const _SurpriseCard({
     required this.surprise,
@@ -136,99 +267,111 @@ class _SurpriseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Emoji circle
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                surprise.typeEmoji,
-                style: const TextStyle(fontSize: 24),
-              ),
-            ),
-            const SizedBox(width: 12),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHighest.withOpacity(0.4),
+        border: Border(
+          left: BorderSide(
+            color: AppColors.primary.withOpacity(0.3),
+            width: 2,
+          ),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onLongPress: onDelete,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Emoji + date
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      surprise.typeEmoji,
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                    Text(
+                      DateFormat('dd MMM', 'pt_BR')
+                          .format(surprise.date)
+                          .toUpperCase(),
+                      style: TextStyle(
+                        fontFamily: 'SpaceGrotesk',
+                        fontSize: 10,
+                        letterSpacing: 1,
+                        color: AppColors.outline,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
 
-            // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                // Type label
+                Text(
+                  surprise.typeLabel,
+                  style: TextStyle(
+                    fontFamily: 'PlusJakartaSans',
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                    height: 1.2,
+                  ),
+                ),
+
+                // Partner name
+                if (surprise.partnerName != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    surprise.partnerName!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.outline,
+                    ),
+                  ),
+                ],
+
+                // Note
+                if (surprise.note != null && surprise.note!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    surprise.note!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.onSurfaceVariant.withOpacity(0.6),
+                      height: 1.5,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+
+                // Agent badge
+                if (surprise.suggestedByAgent) ...[
+                  const SizedBox(height: 10),
                   Row(
                     children: [
-                      Expanded(
-                        child: Text(
-                          surprise.typeLabel,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ),
+                      Icon(Icons.auto_awesome,
+                          size: 13, color: AppColors.tertiary),
+                      const SizedBox(width: 4),
                       Text(
-                        DateFormat('dd/MM/yy').format(surprise.date),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
+                        'SUGERIDO PELO AGENTE',
+                        style: TextStyle(
+                          fontFamily: 'SpaceGrotesk',
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2,
+                          color: AppColors.tertiary,
+                        ),
                       ),
                     ],
                   ),
-                  if (surprise.partnerName != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      surprise.partnerName!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                    ),
-                  ],
-                  if (surprise.note != null && surprise.note!.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      surprise.note!,
-                      style: Theme.of(context).textTheme.bodySmall,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  if (surprise.suggestedByAgent) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(Icons.auto_awesome,
-                            size: 14, color: AppColors.accent),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Sugerido pelo agente',
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: AppColors.accent,
-                                  ),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
-              ),
+              ],
             ),
-
-            // Delete
-            IconButton(
-              icon: Icon(Icons.close, size: 18, color: AppColors.textSecondary),
-              onPressed: onDelete,
-              visualDensity: VisualDensity.compact,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -250,23 +393,29 @@ class _EmptyState extends StatelessWidget {
           children: [
             Icon(
               Icons.history,
-              size: 80,
-              color: AppColors.primary.withOpacity(0.3),
+              size: 64,
+              color: AppColors.primary.withOpacity(0.2),
             ),
             const SizedBox(height: 24),
             Text(
-              'Nenhuma surpresa registrada',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              'Nenhuma surpresa\nregistrada',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'PlusJakartaSans',
+                fontWeight: FontWeight.w800,
+                fontSize: 24,
+                letterSpacing: -0.5,
+                color: AppColors.onSurface,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Registre as surpresas que você fez para acompanhar seu histórico.',
+              'Registre as surpresas que você fez para\nacompanhar seu histórico.',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.outline,
+              ),
             ),
             const SizedBox(height: 32),
             ElevatedButton.icon(

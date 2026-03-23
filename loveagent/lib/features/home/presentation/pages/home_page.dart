@@ -212,7 +212,7 @@ class _Dashboard extends ConsumerWidget {
                 child: _ActionCard(
                   icon: Icons.history,
                   label: 'Histórico',
-                  onTap: () => context.push('/history'),
+                  onTap: () => context.go('/history'),
                 ),
               ),
               const SizedBox(width: 12),
