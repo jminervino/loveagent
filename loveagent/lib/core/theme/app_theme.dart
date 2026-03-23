@@ -45,7 +45,7 @@ abstract class AppTheme {
             color: AppColors.onSurface,
           ),
         ),
-        cardTheme: CardThemeData(
+        cardTheme: CardTheme(
           color: AppColors.surfaceContainerHigh.withOpacity(0.4),
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -131,7 +131,7 @@ abstract class AppTheme {
             ),
           ),
         ),
-        dialogTheme: DialogThemeData(
+        dialogTheme: DialogTheme(
           backgroundColor: AppColors.surfaceContainerHigh,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(4),
